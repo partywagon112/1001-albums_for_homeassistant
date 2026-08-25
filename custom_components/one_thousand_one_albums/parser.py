@@ -1,7 +1,8 @@
-"""Helpers for parsing 1001 Albums page content."""
+"""Helpers for parsing 1001 Albums project data."""
 
 from __future__ import annotations
 
+import json
 import re
 from html import unescape
 
@@ -48,7 +49,7 @@ def _parse_block(block: str) -> dict[str, str]:
     ]
     heading_texts = [
         text for text in heading_texts
-        if text and text.lower() not in {"today", "album of the day", "tomorrow", "next album", "album"}
+        if text and text.lower() not in {"today", "album of the day", "album"}
     ]
 
     artist_matches = re.findall(r'<p[^>]*>(.*?)</p>', block, re.IGNORECASE | re.DOTALL)
@@ -58,7 +59,7 @@ def _parse_block(block: str) -> dict[str, str]:
     ]
     artist_texts = [
         text for text in artist_texts
-        if text and text.lower() not in {"today", "tomorrow", "album", "artist", "next album"}
+        if text and text.lower() not in {"today", "album", "artist"}
     ]
 
     title = heading_texts[0] if heading_texts else ""
@@ -70,44 +71,62 @@ def _parse_block(block: str) -> dict[str, str]:
     }
 
 
-def parse_album_page(html: str) -> dict[str, dict[str, str]]:
-    """Parse the site HTML into today's and tomorrow's album data.
+def _best_cover_image(images: list[dict] | None) -> str:
+    if not images:
+        return ""
 
-    This is retained as a fallback while the preferred integration path is a signed
-    API request with an API key.
-    """
+    best = None
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        url = image.get("url")
+        width = int(image.get("width") or 0)
+        height = int(image.get("height") or 0)
+        if not url:
+            continue
+        score = width * height
+        if best is None or score > best[0]:
+            best = (score, url)
+
+    return best[1] if best else ""
+
+
+def parse_album_page(payload: str | dict | None) -> dict[str, dict[str, str]]:
+    """Parse the current album from the public project JSON API or HTML fallback."""
     today = {"title": "", "artist": "", "image": ""}
 
-    title_value = _extract_meta(html, "og:title") or _extract_meta(html, "twitter:title")
-    image_value = _extract_meta(html, "og:image") or _extract_meta(html, "twitter:image")
-    if title_value:
-        today["title"], today["artist"] = _extract_title_artist(title_value)
-    if image_value:
-        today["image"] = image_value
+    if isinstance(payload, dict):
+        album = payload
+    elif isinstance(payload, str):
+        cleaned = payload.strip()
+        if not cleaned:
+            return {"today": today}
+        try:
+            album = json.loads(cleaned)
+        except json.JSONDecodeError:
+            album = None
+            html = payload
+            title_value = _extract_meta(html, "og:title") or _extract_meta(html, "twitter:title")
+            image_value = _extract_meta(html, "og:image") or _extract_meta(html, "twitter:image")
+            if title_value:
+                today["title"], today["artist"] = _extract_title_artist(title_value)
+            if image_value:
+                today["image"] = image_value
 
-    tomorrow = {"title": "", "artist": "", "image": ""}
+            if not today["title"] or not today["artist"]:
+                match = re.search(
+                    r'(?is)<h[1-3][^>]*>.*?(?:today|album of the day).*?</h[1-3]>.*?<h[1-3][^>]*>(.*?)</h[1-3]>.*?<p[^>]*>(.*?)</p>',
+                    html,
+                )
+                if match:
+                    today = _parse_block(match.group(0))
+            return {"today": today}
+    else:
+        return {"today": today}
 
-    tomorrow_match = re.search(
-        r'(?is)tomorrow.*?<h[1-3][^>]*>(.*?)</h[1-3]>.*?<p[^>]*>(.*?)</p>',
-        html,
-    )
-    if tomorrow_match:
-        tomorrow = _parse_block(tomorrow_match.group(0))
+    if isinstance(album, dict):
+        today["title"] = str(album.get("name") or "").strip()
+        today["artist"] = str(album.get("artist") or "").strip()
+        today["image"] = _best_cover_image(album.get("images"))
 
-    if not today["title"] or not today["artist"]:
-        match = re.search(
-            r'(?is)<h[1-3][^>]*>.*?(?:today|album of the day).*?</h[1-3]>.*?<h[1-3][^>]*>(.*?)</h[1-3]>.*?<p[^>]*>(.*?)</p>',
-            html,
-        )
-        if match:
-            today = _parse_block(match.group(0))
-
-    if not tomorrow["title"] and not tomorrow["artist"]:
-        second_match = re.search(
-            r'(?is)(?:tomorrow|next album).*?<h[1-3][^>]*>(.*?)</h[1-3]>.*?<p[^>]*>(.*?)</p>',
-            html,
-        )
-        if second_match:
-            tomorrow = _parse_block(second_match.group(0))
-
-    return {"today": today, "tomorrow": tomorrow}
+    return {"today": today}

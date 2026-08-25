@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
+try:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
+except ImportError:  # pragma: no cover - used for parser-only unit tests
+    ConfigEntry = Any
+    HomeAssistant = Any
+    ConfigType = dict
 
 from .const import DOMAIN
 

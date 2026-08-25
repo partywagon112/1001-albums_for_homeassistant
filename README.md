@@ -5,8 +5,6 @@ A Home Assistant custom integration for 1001 Albums that exposes:
 - today’s album title
 - today’s artist
 - today’s cover art
-- tomorrow’s album title
-- tomorrow’s artist
 
 This is intended to be installed through HACS as a custom integration repository.
 
@@ -27,15 +25,15 @@ https://github.com/partywagon112/1001-albums-hass
 
 ## YAML configuration
 
-There is no public API key for this site. The integration uses the public album page URL directly.
+This integration uses the public project API: 
 
 ```yaml
 sensor:
   - platform: one_thousand_one_albums
-    url: https://1001albums.com/
+    url: https://1001albumsgenerator.com/api/v1/projects/patrick-curtain
 ```
 
-The integration fetches the page and extracts the current album plus tomorrow’s album from the HTML payload.
+The integration fetches the current album payload from the project endpoint and exposes the live album metadata.
 
 ## Entities
 
@@ -44,8 +42,6 @@ The integration exposes these sensors:
 - `sensor.todays_album`
 - `sensor.todays_artist`
 - `sensor.todays_cover_art`
-- `sensor.tomorrows_album`
-- `sensor.tomorrows_artist`
 
 The cover-art sensor exposes the image URL through both `entity_picture` and the `image` attribute.
 
@@ -69,7 +65,8 @@ The cover-art sensor exposes the image URL through both `entity_picture` and the
 
 - The integration domain is `one_thousand_one_albums`.
 - HACS custom repos should be installed from GitHub, not as a zip file.
-- There is no API key; this uses the public site URL directly.
+- This uses the public project endpoint at `https://1001albumsgenerator.com/api/v1/projects/patrick-curtain`.
+- There is no auth key required.
 
 ## Validation
 

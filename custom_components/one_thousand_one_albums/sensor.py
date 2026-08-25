@@ -31,7 +31,7 @@ from .parser import build_auth_headers, parse_album_page
 
 
 class OneThousandOneAlbumsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Fetch and cache the album page."""
+    """Fetch and cache the current album from the public project API."""
 
     def __init__(self, hass, session: aiohttp.ClientSession, url: str) -> None:
         super().__init__(
@@ -48,11 +48,15 @@ class OneThousandOneAlbumsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             async with self.session.get(self.url, headers=headers, timeout=20) as response:
                 response.raise_for_status()
-                html = await response.text()
+                text = await response.text()
         except Exception as err:  # pragma: no cover - network errors handled by HA
             raise UpdateFailed(f"Error fetching 1001 Albums: {err}") from err
 
-        return parse_album_page(html)
+        try:
+            payload = __import__("json").loads(text)
+        except Exception:
+            payload = text
+        return parse_album_page(payload)
 
 
 class AlbumSensor(SensorEntity):
@@ -109,19 +113,6 @@ class TodayAlbumArtSensor(AlbumSensor):
     def entity_picture(self) -> str | None:
         return self.coordinator.data.get("today", {}).get("image")
 
-
-class TomorrowAlbumNameSensor(AlbumSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "tomorrow", "title")
-        self._attr_name = "Tomorrow's album"
-
-
-class TomorrowAlbumArtistSensor(AlbumSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "tomorrow", "artist")
-        self._attr_name = "Tomorrow's artist"
-
-
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up sensors from a config entry."""
     session = aiohttp.ClientSession()
@@ -132,9 +123,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     entities = [
         TodayAlbumNameSensor(coordinator),
         TodayAlbumArtistSensor(coordinator),
-        TodayAlbumArtSensor(coordinator),
-        TomorrowAlbumNameSensor(coordinator),
-        TomorrowAlbumArtistSensor(coordinator),
+        TodayAlbumArtSensor(coordinator)
     ]
     async_add_entities(entities, True)
 
@@ -150,9 +139,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         [
             TodayAlbumNameSensor(coordinator),
             TodayAlbumArtistSensor(coordinator),
-            TodayAlbumArtSensor(coordinator),
-            TomorrowAlbumNameSensor(coordinator),
-            TomorrowAlbumArtistSensor(coordinator),
+            TodayAlbumArtSensor(coordinator)
         ],
         True,
     )
