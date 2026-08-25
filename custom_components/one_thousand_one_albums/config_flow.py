@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-try:
-    from homeassistant import config_entries
-    from homeassistant.core import HomeAssistant
-    from homeassistant.data_entry_flow import FlowResult
-except ImportError:  # pragma: no cover - only used outside Home Assistant
-    config_entries = None
-    HomeAssistant = Any
-    FlowResult = dict
+import voluptuous as vol
+
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResult
 
 from .const import DEFAULT_URL, DOMAIN
 
@@ -26,12 +23,5 @@ class OneThousandOneAlbumsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="1001 Albums", data=user_input)
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema={
-                "url": str,
-            },
-            description_placeholders={
-                "default_url": DEFAULT_URL,
-            },
-        )
+        schema = vol.Schema({vol.Required("URL", default=DEFAULT_URL): str})
+        return self.async_show_form(step_id="user", data_schema=schema)

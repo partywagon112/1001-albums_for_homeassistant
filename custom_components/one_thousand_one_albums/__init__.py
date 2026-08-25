@@ -4,14 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-try:
-    from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.typing import ConfigType
-except ImportError:  # pragma: no cover - only used outside Home Assistant
-    ConfigEntry = Any
-    HomeAssistant = Any
-    ConfigType = dict
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 
@@ -23,9 +18,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up 1001 Albums from a config entry."""
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
+    return unload_ok
