@@ -2,32 +2,38 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-try:
-    from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.typing import ConfigType
-except ImportError:  # pragma: no cover - used for parser-only unit tests
-    ConfigEntry = Any
-    HomeAssistant = Any
-    ConfigType = dict
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
+PLATFORMS = ["sensor"]
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration from YAML."""
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the 1001 Albums integration."""
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> bool:
     """Set up 1001 Albums from a config entry."""
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+    await hass.config_entries.async_forward_entry_setups(
+        entry,
+        PLATFORMS,
+    )
+
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
-    return unload_ok
+async def async_unload_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> bool:
+    """Unload 1001 Albums."""
+    return await hass.config_entries.async_unload_platforms(
+        entry,
+        PLATFORMS,
+    )

@@ -145,7 +145,10 @@ async def async_setup_entry(
         project,
     )
 
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except UpdateFailed:
+        coordinator.data = {}
 
     entities = [
         # Current album
