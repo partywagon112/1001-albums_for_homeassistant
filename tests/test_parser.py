@@ -1,6 +1,78 @@
 import unittest
 
-from custom_components.one_thousand_one_albums.parser import build_auth_headers, parse_album_page
+try:
+    from custom_components.one_thousand_one_albums.parser import build_auth_headers, parse_album_page
+    from custom_components.one_thousand_one_albums.sensor import AlbumArtSensor, AlbumArtistSensor, AlbumNameSensor
+except ModuleNotFoundError:
+    import sys
+    import types
+
+    # Provide lightweight stubs so the unit tests still execute in a plain Python environment.
+    homeassistant = types.ModuleType("homeassistant")
+    components = types.ModuleType("homeassistant.components")
+    sensor_mod = types.ModuleType("homeassistant.components.sensor")
+    helpers = types.ModuleType("homeassistant.helpers")
+    coordinator_mod = types.ModuleType("homeassistant.helpers.update_coordinator")
+
+    class SensorEntity:
+        pass
+
+    class DataUpdateCoordinator:
+        def __init__(self, *args, **kwargs):
+            self.data = None
+            self.last_update_success = True
+
+        def __class_getitem__(cls, item):
+            return cls
+
+    class UpdateFailed(Exception):
+        pass
+
+    sensor_mod.SensorEntity = SensorEntity
+    coordinator_mod.DataUpdateCoordinator = DataUpdateCoordinator
+    coordinator_mod.UpdateFailed = UpdateFailed
+
+    homeassistant.components = components
+    components.sensor = sensor_mod
+    homeassistant.helpers = helpers
+    helpers.update_coordinator = coordinator_mod
+
+    sys.modules["homeassistant"] = homeassistant
+    sys.modules["homeassistant.components"] = components
+    sys.modules["homeassistant.components.sensor"] = sensor_mod
+    sys.modules["homeassistant.helpers"] = helpers
+    sys.modules["homeassistant.helpers.update_coordinator"] = coordinator_mod
+
+    # stub aiohttp
+    aiohttp = types.ModuleType("aiohttp")
+    class ClientSession:
+        pass
+    aiohttp.ClientSession = ClientSession
+    sys.modules["aiohttp"] = aiohttp
+
+    import importlib.util
+    from pathlib import Path
+
+    pkg = types.ModuleType("custom_components")
+    subpkg = types.ModuleType("custom_components.one_thousand_one_albums")
+    for name in ["custom_components", "custom_components.one_thousand_one_albums"]:
+        sys.modules[name] = pkg if name == "custom_components" else subpkg
+
+    for module_name, file_name in [
+        ("custom_components.one_thousand_one_albums.const", "custom_components/one_thousand_one_albums/const.py"),
+        ("custom_components.one_thousand_one_albums.sensor", "custom_components/one_thousand_one_albums/sensor.py"),
+        ("custom_components.one_thousand_one_albums.parser", "custom_components/one_thousand_one_albums/parser.py"),
+    ]:
+        spec = importlib.util.spec_from_file_location(module_name, Path(file_name))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+
+    build_auth_headers = sys.modules["custom_components.one_thousand_one_albums.parser"].build_auth_headers
+    parse_album_page = sys.modules["custom_components.one_thousand_one_albums.parser"].parse_album_page
+    AlbumNameSensor = sys.modules["custom_components.one_thousand_one_albums.sensor"].AlbumNameSensor
+    AlbumArtistSensor = sys.modules["custom_components.one_thousand_one_albums.sensor"].AlbumArtistSensor
+    AlbumArtSensor = sys.modules["custom_components.one_thousand_one_albums.sensor"].AlbumArtSensor
 
 
 HTML = '''
@@ -49,6 +121,26 @@ class ParseAlbumPageTests(unittest.TestCase):
         headers = build_auth_headers("abc123")
 
         self.assertEqual(headers, {})
+
+    def test_current_album_sensor_fields(self):
+        class FakeCoordinator:
+            data = {
+                "name": "Hard Again",
+                "artist": "Muddy Waters",
+                "images": [{"url": "https://example.com/cover-large.jpg"}],
+            }
+            last_update_success = True
+
+        coordinator = FakeCoordinator()
+
+        name_sensor = AlbumNameSensor(coordinator, "Today's album", "album_name")
+        artist_sensor = AlbumArtistSensor(coordinator, "Today's artist", "album_artist")
+        art_sensor = AlbumArtSensor(coordinator, "Today's album cover", "album_art")
+
+        self.assertEqual(name_sensor.state, "Hard Again")
+        self.assertEqual(artist_sensor.state, "Muddy Waters")
+        self.assertEqual(art_sensor.state, "https://example.com/cover-large.jpg")
+        self.assertEqual(art_sensor.entity_picture, "https://example.com/cover-large.jpg")
 
 if __name__ == "__main__":
     unittest.main()

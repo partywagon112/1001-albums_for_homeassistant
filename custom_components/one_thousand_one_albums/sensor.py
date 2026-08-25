@@ -5,38 +5,20 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-try:
-    import aiohttp
-    from homeassistant.components.sensor import SensorEntity
-    from homeassistant.const import ATTR_ATTRIBUTION
-    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-except ImportError:  # pragma: no cover - only used outside Home Assistant
-    aiohttp = None
+import aiohttp
 
-    class SensorEntity:  # type: ignore[no-redef]
-        """Fallback stub for tests and static analysis."""
-
-    class DataUpdateCoordinator:  # type: ignore[no-redef]
-        def __init__(self, *args, **kwargs):
-            self.data = None
-            self.last_update_success = True
-
-    class UpdateFailed(Exception):
-        pass
-
-    ATTR_ATTRIBUTION = "attribution"
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_URL, DEFAULT_URL, DOMAIN
-from .parser import build_auth_headers, parse_album_page
 
 
-class OneThousandOneAlbumsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Fetch and cache the current album from the public project API."""
+class AlbumCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetch the current album."""
 
     def __init__(self, hass, session: aiohttp.ClientSession, url: str) -> None:
         super().__init__(
             hass,
-            logger=_LOGGER,
             name=DOMAIN,
             update_interval=timedelta(hours=1),
         )
@@ -44,105 +26,96 @@ class OneThousandOneAlbumsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.url = url or DEFAULT_URL
 
     async def _async_update_data(self) -> dict[str, Any]:
-        headers = build_auth_headers(None)
         try:
-            async with self.session.get(self.url, headers=headers, timeout=20) as response:
+            async with self.session.get(self.url, timeout=20) as response:
                 response.raise_for_status()
-                text = await response.text()
-        except Exception as err:  # pragma: no cover - network errors handled by HA
-            raise UpdateFailed(f"Error fetching 1001 Albums: {err}") from err
+                data = await response.json()
 
-        try:
-            payload = __import__("json").loads(text)
-        except Exception:
-            payload = text
-        return parse_album_page(payload)
+            return data["currentAlbum"]
+
+        except Exception as err:
+            raise UpdateFailed(f"Error fetching album: {err}") from err
 
 
 class AlbumSensor(SensorEntity):
-    """Base sensor for an album field."""
+    """Base album sensor."""
 
-    _attr_attribution = "Data provided by 1001 Albums"
-
-    def __init__(self, coordinator: DataUpdateCoordinator[dict[str, Any]], field: str, key: str) -> None:
+    def __init__(
+        self,
+        coordinator: AlbumCoordinator,
+        name: str,
+        unique_id: str,
+    ) -> None:
         self.coordinator = coordinator
-        self._field = field
-        self._key = key
-        self._attr_unique_id = f"{DOMAIN}_{field}_{key}"
+        self._attr_name = name
+        self._attr_unique_id = unique_id
 
     @property
     def available(self) -> bool:
         return self.coordinator.last_update_success
 
+
+class AlbumNameSensor(AlbumSensor):
+    """Current album name."""
+
     @property
     def state(self) -> str:
-        data = self.coordinator.data or {}
-        album = data.get(self._field, {})
-        return album.get(self._key, "unknown")
+        return self.coordinator.data.get("name", "Unknown")
+
+
+class AlbumArtistSensor(AlbumSensor):
+    """Current album artist."""
 
     @property
-    def extra_state_attributes(self) -> dict[str, str]:
-        data = self.coordinator.data or {}
-        album = data.get(self._field, {})
-        return {
-            ATTR_ATTRIBUTION: self._attr_attribution,
-            "title": album.get("title", ""),
-            "artist": album.get("artist", ""),
-            "image": album.get("image", ""),
-        }
+    def state(self) -> str:
+        return self.coordinator.data.get("artist", "Unknown")
 
 
-class TodayAlbumNameSensor(AlbumSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "today", "title")
-        self._attr_name = "Today's album"
+class AlbumArtSensor(AlbumSensor):
+    """Current album cover."""
 
-
-class TodayAlbumArtistSensor(AlbumSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "today", "artist")
-        self._attr_name = "Today's artist"
-
-
-class TodayAlbumArtSensor(AlbumSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "today", "image")
-        self._attr_name = "Today's cover art"
+    @property
+    def state(self) -> str:
+        images = self.coordinator.data.get("images", []) if self.coordinator.data else []
+        return images[0]["url"] if images else "unknown"
 
     @property
     def entity_picture(self) -> str | None:
-        return self.coordinator.data.get("today", {}).get("image")
+        images = self.coordinator.data.get("images", []) if self.coordinator.data else []
+        return images[0]["url"] if images else None
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up sensors from a config entry."""
+
     session = aiohttp.ClientSession()
-    url = config_entry.options.get(CONF_URL) or config_entry.data.get(CONF_URL, DEFAULT_URL)
-    coordinator = OneThousandOneAlbumsCoordinator(hass, session, url)
-    await coordinator.async_config_entry_first_refresh()
 
-    entities = [
-        TodayAlbumNameSensor(coordinator),
-        TodayAlbumArtistSensor(coordinator),
-        TodayAlbumArtSensor(coordinator)
-    ]
-    async_add_entities(entities, True)
+    url = (
+        config_entry.options.get(CONF_URL)
+        or config_entry.data.get(CONF_URL)
+        or DEFAULT_URL
+    )
 
+    coordinator = AlbumCoordinator(hass, session, url)
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up sensors from YAML."""
-    session = aiohttp.ClientSession()
-    url = config.get(CONF_URL, DEFAULT_URL)
-    coordinator = OneThousandOneAlbumsCoordinator(hass, session, url)
     await coordinator.async_config_entry_first_refresh()
 
     async_add_entities(
         [
-            TodayAlbumNameSensor(coordinator),
-            TodayAlbumArtistSensor(coordinator),
-            TodayAlbumArtSensor(coordinator)
-        ],
-        True,
+            AlbumNameSensor(
+                coordinator,
+                "Today's album",
+                f"{DOMAIN}_album_name",
+            ),
+            AlbumArtistSensor(
+                coordinator,
+                "Today's artist",
+                f"{DOMAIN}_album_artist",
+            ),
+            AlbumArtSensor(
+                coordinator,
+                "Today's album cover",
+                f"{DOMAIN}_album_art",
+            ),
+        ]
     )
-
-
-_LOGGER = __import__("logging").getLogger(__name__)
