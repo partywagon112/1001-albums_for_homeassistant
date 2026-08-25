@@ -77,7 +77,21 @@ async def async_unload_entry(
     entry: ConfigEntry,
 ) -> bool:
     """Unload 1001 Albums."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+    try:
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    except Exception as err:  # defensive: ensure we always try to clean up stored data
+        _LOGGER.exception("Error unloading platforms: %s", err)
+        unload_ok = False
+
+    # Always try to remove stored coordinator/session for this entry
+    try:
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    except Exception:
+        # be defensive; don't raise during unload
+        hass.data.pop(DOMAIN, None)
+
+    # If no entries remain for this domain, remove the domain key
+    if not hass.data.get(DOMAIN):
+        hass.data.pop(DOMAIN, None)
+
     return unload_ok
