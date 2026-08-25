@@ -9,6 +9,7 @@ import aiohttp
 import logging
 
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.camera import CameraEntity
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -60,6 +61,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         OneThousandOneAlbumsNameSensor(coordinator, entry.entry_id),
         OneThousandOneAlbumsReleaseDateSensor(coordinator, entry.entry_id),
         OneThousandOneAlbumsImageSensor(coordinator, entry.entry_id),
+        OneThousandOneAlbumsArtistSensor(coordinator, entry.entry_id),
+        OneThousandOneAlbumsArtistOriginSensor(coordinator, entry.entry_id),
+        OneThousandOneAlbumsListSensor(coordinator, entry.entry_id, "genres", "Genres"),
+        OneThousandOneAlbumsListSensor(coordinator, entry.entry_id, "styles", "Styles"),
+        OneThousandOneAlbumsListSensor(coordinator, entry.entry_id, "subGenres", "SubGenres"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "spotifyId", "Spotify"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "appleMusicId", "Apple Music"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "tidalId", "Tidal"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "amazonMusicId", "Amazon Music"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "youtubeMusicId", "YouTube Music"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "qobuzId", "Qobuz"),
+        OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "deezerId", "Deezer"),
+        OneThousandOneAlbumsNotesSensor(coordinator, entry.entry_id),
+        OneThousandOneAlbumsCamera(coordinator, entry.entry_id, session),
     ]
 
     async_add_entities(entities, True)
@@ -142,5 +157,145 @@ class OneThousandOneAlbumsImageSensor(_BaseCoordinatorSensor):
             attrs = dict(attrs)
             attrs["entity_picture"] = images[0].get("url")
         return attrs
+
+
+class OneThousandOneAlbumsArtistSensor(_BaseCoordinatorSensor):
+    """Sensor for the current album artist."""
+
+    @property
+    def name(self) -> str:
+        return "1001 Albums - Artist"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry_id}_current_album_artist"
+
+    @property
+    def state(self) -> Any:
+        data = self.coordinator.data or {}
+        current = data.get("currentAlbum") or {}
+        return current.get("artist")
+
+
+class OneThousandOneAlbumsArtistOriginSensor(_BaseCoordinatorSensor):
+    """Sensor for the current album artist origin."""
+
+    @property
+    def name(self) -> str:
+        return "1001 Albums - Artist Origin"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry_id}_current_album_artist_origin"
+
+    @property
+    def state(self) -> Any:
+        data = self.coordinator.data or {}
+        current = data.get("currentAlbum") or {}
+        return current.get("artistOrigin")
+
+
+class OneThousandOneAlbumsListSensor(_BaseCoordinatorSensor):
+    """Generic sensor for list fields (genres/styles/subGenres)."""
+
+    def __init__(self, coordinator: DataUpdateCoordinator, entry_id: str, key: str, title: str) -> None:
+        super().__init__(coordinator, entry_id)
+        self._key = key
+        self._title = title
+
+    @property
+    def name(self) -> str:
+        return f"1001 Albums - {self._title}"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry_id}_current_album_{self._key}"
+
+    @property
+    def state(self) -> Any:
+        data = self.coordinator.data or {}
+        current = data.get("currentAlbum") or {}
+        values = current.get(self._key) or []
+        if isinstance(values, list):
+            return ", ".join(str(v) for v in values)
+        return values
+
+
+class OneThousandOneAlbumsPlayerSensor(_BaseCoordinatorSensor):
+    """Generic sensor for player IDs like spotifyId, appleMusicId, etc."""
+
+    def __init__(self, coordinator: DataUpdateCoordinator, entry_id: str, key: str, title: str) -> None:
+        super().__init__(coordinator, entry_id)
+        self._key = key
+        self._title = title
+
+    @property
+    def name(self) -> str:
+        return f"1001 Albums - {self._title}"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry_id}_current_album_{self._key}"
+
+    @property
+    def state(self) -> Any:
+        data = self.coordinator.data or {}
+        current = data.get("currentAlbum") or {}
+        return current.get(self._key)
+
+
+class OneThousandOneAlbumsNotesSensor(_BaseCoordinatorSensor):
+    """Sensor for currentAlbumNotes."""
+
+    @property
+    def name(self) -> str:
+        return "1001 Albums - Current Album Notes"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry_id}_current_album_notes"
+
+    @property
+    def state(self) -> Any:
+        data = self.coordinator.data or {}
+        current = data.get("currentAlbum") or {}
+        return current.get("currentAlbumNotes")
+
+
+class OneThousandOneAlbumsCamera(CoordinatorEntity, CameraEntity):
+    """Camera entity that returns the 0th image bytes so the UI can display it."""
+
+    def __init__(self, coordinator: DataUpdateCoordinator, entry_id: str, session: aiohttp.ClientSession) -> None:
+        super().__init__(coordinator)
+        self._entry_id = entry_id
+        self._session = session
+
+    @property
+    def name(self) -> str:
+        return "1001 Albums - Cover Camera"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry_id}_cover_camera"
+
+    async def async_camera_image(self) -> bytes | None:
+        data = self.coordinator.data or {}
+        current = data.get("currentAlbum") or {}
+        images = current.get("images") or []
+        if not (images and isinstance(images, list)):
+            return None
+        url = images[0].get("url")
+        if not url:
+            return None
+        try:
+            async with self._session.get(url, timeout=20) as resp:
+                if resp.status != 200:
+                    _LOGGER.debug("Image fetch returned %s", resp.status)
+                    return None
+                return await resp.read()
+        except aiohttp.ClientError as err:
+            _LOGGER.debug("Error fetching image: %s", err)
+            return None
+
 
 
