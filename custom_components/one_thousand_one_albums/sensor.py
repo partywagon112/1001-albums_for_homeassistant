@@ -4,18 +4,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
-
-import aiohttp
 import logging
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.components.camera import CameraEntity
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
-    UpdateFailed,
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import ATTR_ATTRIBUTION
@@ -24,38 +19,16 @@ from .const import CONF_PROJECT, DEFAULT_PROJECT, DOMAIN, build_project_url
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_SCAN_INTERVAL = timedelta(minutes=30)
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
-    """Set up the 1001 Albums sensors for a config entry."""
+    """Set up the 1001 Albums sensors for a config entry using shared coordinator."""
 
-    project = entry.data.get(CONF_PROJECT, DEFAULT_PROJECT)
-    url = build_project_url(project)
+    stored = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if not stored:
+        _LOGGER.error("Coordinator for entry %s not found in hass.data", entry.entry_id)
+        return
 
-    session = async_get_clientsession(hass)
-
-    async def async_update_data() -> dict[str, Any]:
-        try:
-            async with session.get(url, timeout=20) as resp:
-                if resp.status != 200:
-                    raise UpdateFailed(f"Unexpected status {resp.status}")
-                return await resp.json()
-        except aiohttp.ClientError as err:
-            raise UpdateFailed(err) from err
-
-    coordinator = DataUpdateCoordinator[
-        dict
-    ](
-        hass,
-        _LOGGER,
-        name=f"{DOMAIN}_{project}",
-        update_method=async_update_data,
-        update_interval=DEFAULT_SCAN_INTERVAL,
-    )
-
-    # Fetch initial data
-    await coordinator.async_config_entry_first_refresh()
+    coordinator: DataUpdateCoordinator = stored["coordinator"]
 
     entities: list[SensorEntity] = [
         OneThousandOneAlbumsNameSensor(coordinator, entry.entry_id),
@@ -74,7 +47,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "qobuzId", "Qobuz"),
         OneThousandOneAlbumsPlayerSensor(coordinator, entry.entry_id, "deezerId", "Deezer"),
         OneThousandOneAlbumsNotesSensor(coordinator, entry.entry_id),
-        OneThousandOneAlbumsCamera(coordinator, entry.entry_id, session),
     ]
 
     async_add_entities(entities, True)
@@ -262,40 +234,6 @@ class OneThousandOneAlbumsNotesSensor(_BaseCoordinatorSensor):
         return current.get("currentAlbumNotes")
 
 
-class OneThousandOneAlbumsCamera(CoordinatorEntity, CameraEntity):
-    """Camera entity that returns the 0th image bytes so the UI can display it."""
-
-    def __init__(self, coordinator: DataUpdateCoordinator, entry_id: str, session: aiohttp.ClientSession) -> None:
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._session = session
-
-    @property
-    def name(self) -> str:
-        return "1001 Albums - Cover Camera"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._entry_id}_cover_camera"
-
-    async def async_camera_image(self) -> bytes | None:
-        data = self.coordinator.data or {}
-        current = data.get("currentAlbum") or {}
-        images = current.get("images") or []
-        if not (images and isinstance(images, list)):
-            return None
-        url = images[0].get("url")
-        if not url:
-            return None
-        try:
-            async with self._session.get(url, timeout=20) as resp:
-                if resp.status != 200:
-                    _LOGGER.debug("Image fetch returned %s", resp.status)
-                    return None
-                return await resp.read()
-        except aiohttp.ClientError as err:
-            _LOGGER.debug("Error fetching image: %s", err)
-            return None
 
 
 
