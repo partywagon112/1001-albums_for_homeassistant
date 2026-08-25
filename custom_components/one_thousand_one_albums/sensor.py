@@ -26,11 +26,8 @@ except ImportError:  # pragma: no cover - only used outside Home Assistant
 
     ATTR_ATTRIBUTION = "attribution"
 
+from .const import CONF_URL, DEFAULT_URL, DOMAIN
 from .parser import build_auth_headers, parse_album_page
-
-DOMAIN = "one_thousand_one_albums"
-DEFAULT_URL = "https://1001albums.com/"
-CONF_URL = "url"
 
 
 class OneThousandOneAlbumsCoordinator(DataUpdateCoordinator[dict[str, Any]]):

@@ -10,7 +10,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DEFAULT_URL, DOMAIN
+from .const import CONF_URL, DEFAULT_URL, DOMAIN
 
 
 class OneThousandOneAlbumsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -23,5 +23,5 @@ class OneThousandOneAlbumsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="1001 Albums", data=user_input)
 
-        schema = vol.Schema({vol.Required("URL", default=DEFAULT_URL): str})
+        schema = vol.Schema({vol.Required(CONF_URL, default=DEFAULT_URL): str})
         return self.async_show_form(step_id="user", data_schema=schema)
