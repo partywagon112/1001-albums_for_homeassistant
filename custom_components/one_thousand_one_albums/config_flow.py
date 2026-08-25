@@ -10,7 +10,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import CONF_URL, DEFAULT_URL, DOMAIN
+from .const import CONF_PROJECT, DEFAULT_PROJECT, DOMAIN, build_project_url
 
 
 class OneThousandOneAlbumsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -21,7 +21,11 @@ class OneThousandOneAlbumsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle the initial step."""
         if user_input is not None:
-            return self.async_create_entry(title="1001 Albums", data=user_input)
+            project = user_input[CONF_PROJECT].strip().strip("/")
+            if not project:
+                project = DEFAULT_PROJECT
+            user_input[CONF_PROJECT] = project
+            return self.async_create_entry(title=project, data=user_input)
 
-        schema = vol.Schema({vol.Required(CONF_URL, default=DEFAULT_URL): str})
+        schema = vol.Schema({vol.Required(CONF_PROJECT, default=DEFAULT_PROJECT): str})
         return self.async_show_form(step_id="user", data_schema=schema)

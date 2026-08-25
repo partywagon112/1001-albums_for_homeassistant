@@ -1,74 +1,13 @@
-"""Helpers for parsing 1001 Albums project data."""
+"""Helpers for parsing the 1001 Albums project JSON API."""
 
 from __future__ import annotations
 
 import json
-import re
-from html import unescape
 
 
 def build_auth_headers(api_key: str | None) -> dict[str, str]:
-    """No API key is required; the site is public and URL-based."""
+    """The public project API does not require an auth token."""
     return {}
-
-
-def _extract_meta(html: str, name: str) -> str:
-    pattern = re.compile(
-        rf'<meta[^>]+(?:property|name)=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)["\']',
-        re.IGNORECASE,
-    )
-    match = pattern.search(html)
-    if match:
-        return unescape(match.group(1)).strip()
-    return ""
-
-
-def _extract_title_artist(value: str) -> tuple[str, str]:
-    if not value:
-        return "", ""
-
-    cleaned = unescape(value).strip()
-    cleaned = re.sub(r"^\s*(today|album of the day)\s*[:\-–—]?\s*", "", cleaned, flags=re.IGNORECASE)
-
-    for separator in (" - ", " — ", " – ", " | "):
-        if separator in cleaned:
-            left, right = cleaned.split(separator, 1)
-            return left.strip(), right.strip()
-
-    if " by " in cleaned.lower():
-        left, right = re.split(r"\s+by\s+", cleaned, flags=re.IGNORECASE, maxsplit=1)
-        return left.strip(), right.strip()
-
-    return cleaned, ""
-
-
-def _parse_block(block: str) -> dict[str, str]:
-    heading_texts = [
-        unescape(re.sub(r'<[^>]+>', '', heading)).strip()
-        for heading in re.findall(r'<h[1-3][^>]*>(.*?)</h[1-3]>', block, re.IGNORECASE | re.DOTALL)
-    ]
-    heading_texts = [
-        text for text in heading_texts
-        if text and text.lower() not in {"today", "album of the day", "album"}
-    ]
-
-    artist_matches = re.findall(r'<p[^>]*>(.*?)</p>', block, re.IGNORECASE | re.DOTALL)
-    artist_texts = [
-        unescape(re.sub(r'<[^>]+>', '', text)).strip()
-        for text in artist_matches
-    ]
-    artist_texts = [
-        text for text in artist_texts
-        if text and text.lower() not in {"today", "album", "artist"}
-    ]
-
-    title = heading_texts[0] if heading_texts else ""
-    artist = artist_texts[0] if artist_texts else ""
-
-    return {
-        "title": title,
-        "artist": artist,
-    }
 
 
 def _best_cover_image(images: list[dict] | None) -> str:
@@ -92,41 +31,70 @@ def _best_cover_image(images: list[dict] | None) -> str:
 
 
 def parse_album_page(payload: str | dict | None) -> dict[str, dict[str, str]]:
-    """Parse the current album from the public project JSON API or HTML fallback."""
+    """Parse the current album payload from the public JSON API."""
     today = {"title": "", "artist": "", "image": ""}
 
-    if isinstance(payload, dict):
-        album = payload
-    elif isinstance(payload, str):
+    if isinstance(payload, str):
         cleaned = payload.strip()
         if not cleaned:
             return {"today": today}
         try:
-            album = json.loads(cleaned)
+            payload = json.loads(cleaned)
         except json.JSONDecodeError:
-            album = None
-            html = payload
-            title_value = _extract_meta(html, "og:title") or _extract_meta(html, "twitter:title")
-            image_value = _extract_meta(html, "og:image") or _extract_meta(html, "twitter:image")
-            if title_value:
-                today["title"], today["artist"] = _extract_title_artist(title_value)
-            if image_value:
-                today["image"] = image_value
+            title_value = ""
+            image_value = ""
 
-            if not today["title"] or not today["artist"]:
-                match = re.search(
-                    r'(?is)<h[1-3][^>]*>.*?(?:today|album of the day).*?</h[1-3]>.*?<h[1-3][^>]*>(.*?)</h[1-3]>.*?<p[^>]*>(.*?)</p>',
-                    html,
-                )
-                if match:
-                    today = _parse_block(match.group(0))
+            for meta_name in ("og:title", "twitter:title"):
+                start = cleaned.find(f'property="{meta_name}"')
+                if start == -1:
+                    start = cleaned.find(f'name="{meta_name}"')
+                if start != -1:
+                    content_start = cleaned.find('content="', start)
+                    if content_start != -1:
+                        content_start += len('content="')
+                        content_end = cleaned.find('"', content_start)
+                        if content_end != -1:
+                            title_value = cleaned[content_start:content_end]
+                            break
+
+            for meta_name in ("og:image", "twitter:image"):
+                start = cleaned.find(f'property="{meta_name}"')
+                if start == -1:
+                    start = cleaned.find(f'name="{meta_name}"')
+                if start != -1:
+                    content_start = cleaned.find('content="', start)
+                    if content_start != -1:
+                        content_start += len('content="')
+                        content_end = cleaned.find('"', content_start)
+                        if content_end != -1:
+                            image_value = cleaned[content_start:content_end]
+                            break
+
+            if title_value:
+                if " - " in title_value:
+                    title, artist = title_value.split(" - ", 1)
+                    title = title.replace("Today:", "", 1).strip()
+                    today["title"] = title.strip()
+                    today["artist"] = artist.strip()
+                else:
+                    today["title"] = title_value.strip()
+            if image_value:
+                today["image"] = image_value.strip()
             return {"today": today}
-    else:
+
+    if not isinstance(payload, dict):
         return {"today": today}
 
-    if isinstance(album, dict):
-        today["title"] = str(album.get("name") or "").strip()
-        today["artist"] = str(album.get("artist") or "").strip()
-        today["image"] = _best_cover_image(album.get("images"))
+    album = payload.get("currentAlbum") if isinstance(payload.get("currentAlbum"), dict) else payload
+    title = album.get("name") or payload.get("name")
+    artist = album.get("artist") or payload.get("artist")
+    image = _best_cover_image(album.get("images") or payload.get("images"))
+
+    if title:
+        today["title"] = str(title)
+    if artist:
+        today["artist"] = str(artist)
+    if image:
+        today["image"] = image
 
     return {"today": today}

@@ -25,15 +25,15 @@ https://github.com/partywagon112/1001-albums-hass
 
 ## YAML configuration
 
-This integration uses the public project API: 
+This integration uses the public project API; you only need to provide the project slug.
 
 ```yaml
 sensor:
   - platform: one_thousand_one_albums
-    url: https://1001albumsgenerator.com/api/v1/projects/patrick-curtain
+    project: patrick-curtain
 ```
 
-The integration fetches the current album payload from the project endpoint and exposes the live album metadata.
+The integration builds the API URL internally from the project name and exposes the live album metadata.
 
 ## Entities
 
@@ -65,7 +65,7 @@ The cover-art sensor exposes the image URL through both `entity_picture` and the
 
 - The integration domain is `one_thousand_one_albums`.
 - HACS custom repos should be installed from GitHub, not as a zip file.
-- This uses the public project endpoint at `https://1001albumsgenerator.com/api/v1/projects/patrick-curtain`.
+- This uses the public project endpoint and builds it from the project slug you enter.
 - There is no auth key required.
 
 ## Validation
