@@ -21,7 +21,7 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=30)
 
 from .const import DOMAIN
 
-PLATFORMS = ["sensor", "camera"]
+PLATFORMS = ["sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
