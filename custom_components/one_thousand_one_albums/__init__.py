@@ -20,9 +20,10 @@ async def async_setup_entry(
     entry: ConfigEntry,
 ) -> bool:
     """Set up 1001 Albums from a config entry."""
-    await hass.config_entries.async_forward_entry_setups(
-        entry,
-        PLATFORMS,
+    # Schedule platform setup without awaiting importlib.import_module
+    # directly in the event loop to avoid detected blocking import calls.
+    hass.async_create_task(
+        hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     )
 
     return True
