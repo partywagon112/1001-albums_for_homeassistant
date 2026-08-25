@@ -2,11 +2,11 @@
   "domain": "one_thousand_one_albums",
   "name": "1001 Albums",
   "version": "0.1.0",
-  "documentation": "https://github.com/your-user/1001-albums-hass",
-  "issue_tracker": "https://github.com/your-user/1001-albums-hass/issues",
+  "documentation": "https://github.com/partywagon112/1001-albums-hass",
+  "issue_tracker": "https://github.com/partywagon112/1001-albums-hass/issues",
   "codeowners": [],
   "requirements": [],
-  "config_flow": false,
+  "config_flow": true,
   "iot_class": "cloud_polling",
   "integration_type": "service"
 }

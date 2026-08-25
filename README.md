@@ -22,7 +22,7 @@ This is intended to be installed through HACS as a custom integration repository
 Example repository URL:
 
 ```text
-https://github.com/your-user/1001-albums-hass
+https://github.com/partywagon112/1001-albums-hass
 ```
 
 ## YAML configuration
