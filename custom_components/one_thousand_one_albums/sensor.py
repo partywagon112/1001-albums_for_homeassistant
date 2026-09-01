@@ -54,6 +54,23 @@ class _BaseCoordinatorSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         return {ATTR_ATTRIBUTION: "Data provided by 1001albumsgenerator.com"}
 
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Return device information for the Current Album device.
+
+        Devices are grouped by the config entry `entry_id` so all sensors
+        created for an entry show up under a single device named "Current Album".
+        """
+        stored = self.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        project = stored.get("project")
+        info: dict[str, Any] = {
+            "identifiers": {(DOMAIN, self._entry_id)},
+            "name": "Current Album",
+            "manufacturer": "1001albumsgenerator.com",
+        }
+        if project:
+            info["configuration_url"] = build_project_url(project)
+        return info
 
 class OneThousandOneAlbumsNameSensor(_BaseCoordinatorSensor):
     """Sensor for the current album name."""
@@ -201,7 +218,7 @@ class OneThousandOneAlbumsNotesSensor(_BaseCoordinatorSensor):
     def state(self) -> Any:
         data = self.coordinator.data or {}
         current = data.get("currentAlbum") or {}
-        return current.get("currentAlbumNotes")
+        return str(current.get("currentAlbumNotes"))
 
 
 

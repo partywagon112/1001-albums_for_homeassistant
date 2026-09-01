@@ -58,7 +58,11 @@ async def async_setup_entry(
 
     # store coordinator and session for platform modules
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator, "session": session}
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator,
+        "session": session,
+        "project": project,
+    }
 
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
